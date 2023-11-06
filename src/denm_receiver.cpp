@@ -63,7 +63,7 @@ void decode_received_denm() {
 
         std::cout << "Received DENM message from client: " << buffer << std::endl;
 
-        auto denm_recvd_msg = boost::make_shared<etsi_its_msgs::DENM>();
+        auto ros_denm_recvd_msg = boost::make_shared<etsi_its_msgs::DENM>();
         flatbuffers::FlatBufferBuilder builder;
 
         std::cout<< "nb bytes " << received_bytes << std::endl;
@@ -93,22 +93,48 @@ void decode_received_denm() {
 
                    auto denm_wrapper = static_cast<const DENM*>(fac_rx->msg_as_DENM());
 
-                    if(denm_wrapper == nullptr){
+                    if(denm_wrapper != nullptr){
 
                         const Gos::DENMType denm_type = denm_wrapper->denm_type();
 
                         std::cout << "Received DENMType: " << denm_type << std::endl;
                         
                         const Gos::DENMessage* denm_msg = denm_wrapper->msg();
+
                         //Decoding ITS header
                         const Gos::ItsPduHeader* header = denm_msg->header();
 
-                        denm_recvd_msg->header.stamp = ros::Time::now();
-                        msg->its_header.protocol_version = header->protocol_version();
-                        msg->its_header.station_id = header->station_id();
-                        std::cout << "Station id " << msg->its_header.station_id << std::endl;
+                        ros_denm_recvd_msg->header.stamp = ros::Time::now();
+                        ros_denm_recvd_msg->its_header.protocol_version = header->protocol_version();
+                        ros_denm_recvd_msg->its_header.station_id = header->station_id();
+                        std::cout << "Station id " << ros_denm_recvd_msg->its_header.station_id << std::endl;
 
-                        msg->generation_delta_time = cpm->generation_delta_time();
+                        //Extract the DENM payload
+                        const Gos::DecentralizedEnvironmentalNotificationMessage* denm_payload = denm_msg->denm();
+                        const Gos::DenmManagementContainer* dp_mngmt_cntr = denm_payload->management();
+                        const Gos::SituationContainer* dp_situatn_cntr = denm_payload->situation();
+                        const Gos::LocationContainer* dp_loctn_cntr = denm_payload->location();
+                        const Gos::AlacarteContainer* dp_alacarte_cntr = denm_payload->alacarte();
+
+                        //Extract info from management container
+                        if(dp_mngmt_cntr != nullptr){
+                            
+                            //Acttion ID
+                            ros_denm_recvd_msg->management.action_id.station_id = dp_mngmt_cntr->action_id()->originating_station_id();
+                            ros_denm_recvd_msg->management.action_id.sequence_number = dp_mngmt_cntr->action_id()->sequence_number();
+
+                            //Detection time & Reference time
+                            ros_denm_recvd_msg->management.detection_time = dp_mngmt_cntr->detection_time();
+                            ros_denm_recvd_msg->management.reference_time = dp_mngmt_cntr->reference_time();
+ 
+                            //Terminaiton
+
+                        }
+
+
+
+                        #if 0
+                        ros_denm_recvd_msg->generation_delta_time = cpm->generation_delta_time();
                         std::cout << "generation_delt_time " <<  msg->generation_delta_time << std::endl;
 
                         const Gos::ManagementContainer *mngmt_cntr = cpm->mgmt_container();
@@ -310,15 +336,15 @@ void decode_received_denm() {
                                 msg->has_list_of_perceived_object = false;
                                 std::cout << " ******** POC is empty" << std::endl; 
                         }
-
+                        #endif
                     }
 
                 }
             }
 
-            if (msg)
+            if (ros_denm_recvd_msg)
             {
-                pub_denm_.publish(msg);
+                pub_denm_.publish(ros_denm_recvd_msg);
             }
             else
             {
